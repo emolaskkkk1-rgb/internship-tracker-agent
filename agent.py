@@ -53,16 +53,21 @@ def get_company_info(company: str) -> str:
 @tool
 def get_city_weather(city: str) -> str:
     """Get the current temperature in Celsius for a city (useful for interview day)."""
-    geo = requests.get("https://geocoding-api.open-meteo.com/v1/search",
-                       params={"name": city, "count": 1}, timeout=20).json()
-    if not geo.get("results"):
-        return f"City not found: {city}"
-    g = geo["results"][0]
-    w = requests.get("https://api.open-meteo.com/v1/forecast",
-                     params={"latitude": g["latitude"], "longitude": g["longitude"],
-                             "current": "temperature_2m"}, timeout=20)
-    w.raise_for_status()
-    return f"{g['name']}: {w.json()['current']['temperature_2m']} °C"
+    for attempt in range(3):
+        try:
+            geo = requests.get("https://geocoding-api.open-meteo.com/v1/search",
+                               params={"name": city, "count": 1}, timeout=30).json()
+            if not geo.get("results"):
+                return f"City not found: {city}"
+            g = geo["results"][0]
+            w = requests.get("https://api.open-meteo.com/v1/forecast",
+                             params={"latitude": g["latitude"], "longitude": g["longitude"],
+                                     "current": "temperature_2m"}, timeout=30)
+            w.raise_for_status()
+            return f"{g['name']}: {w.json()['current']['temperature_2m']} °C"
+        except requests.exceptions.RequestException:
+            if attempt == 2:
+                return "Weather service is temporarily unavailable. Please try again."
 
 
 @tool
@@ -83,7 +88,9 @@ TOOLS = [add_application, list_applications, update_status,
 
 SYSTEM = SystemMessage(content="""You are an Internship Application Tracker assistant.
 Use tools to manage applications, look up company info and check weather.
-For deletions always call delete_application and never delete without it.
+IMPORTANT: Whenever the user asks to delete, remove or cancel an application, you MUST
+call the delete_application tool immediately. Never ask for confirmation in text,
+the tool itself asks the user for approval.
 If a tool result says the action was cancelled by the user, do NOT call the tool again.
 Just tell the user the deletion was cancelled and nothing was deleted.""")
 
